@@ -1062,7 +1062,7 @@ impl AgonMachine {
             }
         };
         let filinfo_ptr = self._peek24(cpu.state.sp() + 6);
-        let path = self.host_path_from_mos_path_join(&path_str);
+        let mut path = self.host_path_from_mos_path_join(&path_str);
         //eprintln!("f_stat(\"{}\", ${:x})", path_str, filinfo_ptr);
 
         match std::fs::metadata(&path) {
@@ -1078,7 +1078,22 @@ impl AgonMachine {
             Err(e) => {
                 match e.kind() {
                     std::io::ErrorKind::NotFound => {
-                        cpu.state.reg.set24(Reg16::HL, 4);
+                        let leafname = path.file_name().unwrap().to_str().unwrap().to_string();
+                        if path.pop() {
+                            if path.exists() {
+                                // if our leafname included a wildcard (* or ?), then we should return 6 (invalid name)
+                                if leafname.contains('*') || leafname.contains('?') {
+                                    cpu.state.reg.set24(Reg16::HL, 6);
+                                } else {
+                                    // if the directory exists, then the file does not exist
+                                    cpu.state.reg.set24(Reg16::HL, 4);
+                                }
+                            } else {
+                                cpu.state.reg.set24(Reg16::HL, 5);
+                            }
+                        } else {
+                            cpu.state.reg.set24(Reg16::HL, 4);
+                        }
                     }
                     _ => {
                         cpu.state.reg.set24(Reg16::HL, 1);
